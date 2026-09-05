@@ -10,7 +10,15 @@ describe("InMemoryMemoryStore property-based tests", () => {
   const taskIdArb = fc.string({ minLength: 1, maxLength: 20 });
   const inputArb = fc.string();
   const outputArb = fc.anything();
-  const recordedAtArb = fc.date().map((d) => d.toISOString());
+  // Wrap toISOString() in try-catch to handle edge cases from fast-check's date generation
+  // which may produce dates outside the 0-9999 year range that toISOString() accepts
+  const recordedAtArb = fc.date().map((d) => {
+    try {
+      return d.toISOString();
+    } catch {
+      return new Date(0).toISOString();
+    }
+  });
 
   const entryArb: fc.Arbitrary<MemoryEntry> = fc.record({
     agentId: agentIdArb,
