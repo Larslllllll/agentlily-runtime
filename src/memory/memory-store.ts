@@ -175,11 +175,15 @@ export class JsonFileMemoryStore implements MemoryStore {
   }
 
   private async flush(): Promise<void> {
+    if (this.memoryCache === null) {
+      return;
+    }
+
     const dir = dirname(this.filePath);
     if (dir && dir !== "." && !existsSync(dir)) {
       await mkdir(dir, { recursive: true });
     }
-    const data = JSON.stringify(this.memoryCache ?? [], null, 2);
+    const data = JSON.stringify(this.memoryCache, null, 2);
     await writeFile(this.filePath, data, "utf-8");
   }
 
@@ -189,13 +193,30 @@ export class JsonFileMemoryStore implements MemoryStore {
     await this.flush();
   }
 
-  public async listByAgent(agentId: string): Promise<MemoryEntry[]> {
+  public async listByAgent(
+    agentId: string,
+    options?: ListMemoryOptions
+  ): Promise<MemoryEntry[]> {
     const entries = await this.loadEntries();
-    return entries.filter((entry) => entry.agentId === agentId);
+    const matching = entries.filter((entry) => entry.agentId === agentId);
+    const offset = options?.offset ?? 0;
+    const limit = options?.limit ?? matching.length;
+    return matching.slice(offset, offset + limit).map((entry) => ({ ...entry }));
+  }
+
+  public async countByAgent(agentId: string): Promise<number> {
+    const entries = await this.loadEntries();
+    return entries.filter((entry) => entry.agentId === agentId).length;
   }
 
   public async clear(): Promise<void> {
     this.memoryCache = [];
-    await this.flush();
+    // Remove the backing file to match the "empty or removed backing file" acceptance criterion
+    try {
+      const { rm } = await import("node:fs/promises");
+      await rm(this.filePath, { force: true });
+    } catch {
+      // Ignore removal errors (file may not exist)
+    }
   }
 }
